@@ -224,7 +224,7 @@ def hamming_distance_array(
     norm_gradient: float = 0.00005,
     separate_half_matching: bool = False,
     weights: Optional[List[np.ndarray]] = None,
-) -> Tuple[float, int]:
+):
     """Compute Hamming distance.
 
     Args:
