@@ -5,7 +5,7 @@ from pydantic import confloat, conint
 
 from iris.io.dataclasses import IrisTemplate
 from iris.nodes.matcher.hamming_distance_matcher_interface import Matcher
-from iris.nodes.matcher.utils import hamming_distance
+from iris.nodes.matcher.utils import hamming_distance, hamming_distance_array
 
 
 class HammingDistanceMatcher(Matcher):
@@ -89,3 +89,26 @@ class HammingDistanceMatcher(Matcher):
         )
 
         return score
+
+    def run_array(self, template_probe: IrisTemplate, template_gallery: IrisTemplate) -> float:
+        """Match iris templates using Hamming distance.
+
+        Args:
+            template_probe (IrisTemplate): Iris template from probe.
+            template_gallery (IrisTemplate): Iris template from gallery.
+
+        Returns:
+            float: matching distance.
+        """
+        ret_array = hamming_distance_array(
+            template_probe=template_probe,
+            template_gallery=template_gallery,
+            rotation_shift=self.params.rotation_shift,
+            normalise=self.params.normalise,
+            norm_mean=self.params.norm_mean,
+            norm_gradient=self.params.norm_gradient,
+            separate_half_matching=self.params.separate_half_matching,
+            weights=self.params.weights,
+        )
+
+        return ret_array

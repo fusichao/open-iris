@@ -213,3 +213,90 @@ def hamming_distance(
             match_rot = current_shift
 
     return match_dist, match_rot
+
+
+def hamming_distance_array(
+    template_probe: IrisTemplate,
+    template_gallery: IrisTemplate,
+    rotation_shift: int = 15,
+    normalise: bool = False,
+    norm_mean: float = 0.45,
+    norm_gradient: float = 0.00005,
+    separate_half_matching: bool = False,
+    weights: Optional[List[np.ndarray]] = None,
+) -> Tuple[float, int]:
+    """Compute Hamming distance.
+
+    Args:
+        template_probe (IrisTemplate): Iris template from probe.
+        template_gallery (IrisTemplate): Iris template from gallery.
+        rotation_shift (int): Rotation allowed in matching, converted to columns. Defaults to 15.
+        normalise (bool, optional): Flag to normalize HD. Defaults to False.
+        norm_mean (float, optional): Nonmatch mean distance for normalized HD. Defaults to 0.45.
+        norm_gradient (float): Gradient for linear approximation of normalization term. Defaults to 0.00005.
+        separate_half_matching (bool, optional): Separate the upper and lower halves for matching. Defaults to False.
+        weights (Optional[List[np.ndarray]], optional): List of weights table. Optional parameter for weighted HD. Defaults to None.
+
+    Raises:
+        MatcherError: If probe and gallery iris codes are of different sizes or number of columns of iris codes is not even or If weights (when defined) and iris codes are of different sizes.
+
+    Returns:
+        Tuple[float, int]: Minimum Hamming distance and corresponding rotation shift.
+    """
+    half_codewidth = []
+
+    for probe_code, gallery_code in zip(template_probe.iris_codes, template_gallery.iris_codes):
+        if probe_code.shape != gallery_code.shape:
+            raise MatcherError("probe and gallery iris codes are of different sizes")
+        if (probe_code.shape[1] % 2) != 0:
+            raise MatcherError("number of columns of iris codes need to be even")
+        if separate_half_matching:
+            half_codewidth.append(int(probe_code.shape[1] / 2))
+
+    if weights:
+        for probe_code, w in zip(template_probe.iris_codes, weights):
+            if probe_code.shape != w.shape:
+                raise MatcherError("weights table and iris codes are of different sizes")
+
+    # Calculate the Hamming distance between probe and gallery template.
+    match_dist = 1
+    match_rot = 0
+    rotation_array = list(range(-rotation_shift, rotation_shift + 1))
+    ret_array = np.zeros([len(rotation_array), 2], dtype=float)
+    for k, current_shift in enumerate(rotation_array):
+        irisbits, maskbits = get_bitcounts(template_probe, template_gallery, current_shift)
+        totalirisbitcount, totalmaskbitcount = count_nonmatchbits(irisbits, maskbits, half_codewidth, weights)
+        totalmaskbitcountsum = totalmaskbitcount.sum()
+        if totalmaskbitcountsum == 0:
+            continue
+
+        if normalise:
+            normdist = normalized_HD(totalirisbitcount.sum(), totalmaskbitcountsum, norm_mean, norm_gradient)
+            if separate_half_matching:
+                normdist0 = (
+                    normalized_HD(totalirisbitcount[0], totalmaskbitcount[0], norm_mean, norm_gradient)
+                    if totalmaskbitcount[0] > 0
+                    else norm_mean
+                )
+                normdist1 = (
+                    normalized_HD(totalirisbitcount[1], totalmaskbitcount[1], norm_mean, norm_gradient)
+                    if totalmaskbitcount[0] > 0
+                    else norm_mean
+                )
+                Hdist = np.mean(
+                    [
+                        normdist,
+                        (normdist0 * totalmaskbitcount[0] + normdist1 * totalmaskbitcount[1]) / totalmaskbitcountsum,
+                    ]
+                )
+            else:
+                Hdist = normdist
+        else:
+            Hdist = totalirisbitcount.sum() / totalmaskbitcountsum
+
+        ret_array[k, 0] = Hdist
+        ret_array[k, 1] = current_shift
+
+    return ret_array
+
+
