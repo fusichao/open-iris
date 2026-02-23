@@ -1,83 +1,156 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
+from glob import glob
+from pathlib import Path
+import iris
+from iris.nodes.matcher.hamming_distance_matcher import HammingDistanceMatcher
 
 
-def get_quadratic_vertex(y_values):
-    """
-    输入: y_values 为长度为 3 的数组/列表，代表 x 为 [-1, 0, 1] 处的 y 值
-    输出: 拟合曲线顶点的 x 坐标
-    """
-    y_neg1, y_0, y_1 = y_values
+EMPTY_ROW = {
+    "image_id": np.nan,
+    "frame_no": np.nan,
+    "eye_side": np.nan,
+    "image_width": np.nan,
+    "image_height": np.nan,
 
-    # 计算系数 a 和 b
-    # a = (y1 + y-1 - 2*y0) / 2
-    # b = (y1 - y-1) / 2
+    "iris_center_x": np.nan,
+    "iris_center_y": np.nan,
+    "pupil_center_x": np.nan,
+    "pupil_center_y": np.nan,
 
-    numerator = y_neg1 - y_1
-    denominator = 2 * (y_1 + y_neg1 - 2 * y_0)
+    "pupil_iris_diameter_ratio": np.nan,
+    "pupil_iris_center_dist_ratio": np.nan,
 
-    # 检查分母是否为 0（即三点共线，无法构成二次曲线）
-    if denominator == 0:
-        return float('inf')  # 或者返回 None，取决于你的业务逻辑
+    "offgaze_score": np.nan,
+    "eye_orientation": np.nan,
+    "occlusion90": np.nan,
+    "occlusion30": np.nan,
+    "sharpness_score": np.nan,
 
-    return numerator / denominator
+    "iris_xmin": np.nan,
+    "iris_ymin": np.nan,
+    "iris_xmax": np.nan,
+    "iris_ymax": np.nan,
+
+    "score": np.nan,
+    "rotation": np.nan,
+}
 
 
+def iris_result_to_row(d):
+    return {
+        "image_id": d["image_id"],
+        "frame_no": d["frame_no"],
+        "eye_side": d["eye_side"],
+        "image_width": d["image_size"][0],
+        "image_height": d["image_size"][1],
 
-def get_min_first_col_idx_and_second_val(x: np.ndarray):
-    """
-    x: shape (n, 2) 的 ndarray
-    返回:
-        idx: 使 x[:, 0] 最小的下标
-        val: x[idx, 1] 的值
-    """
-    if x.ndim != 2 or x.shape[1] != 2:
-        raise ValueError("x 必须是形状为 (n, 2) 的 ndarray")
+        # 瞳孔 & 虹膜中心（你前面正好在研究这个）
+        "iris_center_x": d["eye_centers"]["iris_center"][0],
+        "iris_center_y": d["eye_centers"]["iris_center"][1],
+        "pupil_center_x": d["eye_centers"]["pupil_center"][0],
+        "pupil_center_y": d["eye_centers"]["pupil_center"][1],
 
-    idx = np.argmin(x[:, 0])
-    return idx, x[idx, 1]
+        # 比例信息
+        "pupil_iris_diameter_ratio": d["pupil_to_iris_property"]["pupil_to_iris_diameter_ratio"],
+        "pupil_iris_center_dist_ratio": float(d["pupil_to_iris_property"]["pupil_to_iris_center_dist_ratio"]),
+
+        # 质量指标
+        "offgaze_score": float(d["offgaze_score"]),
+        "eye_orientation": float(d["eye_orientation"]),
+        "occlusion90": float(d["occlusion90"]),
+        "occlusion30": float(d["occlusion30"]),
+        "sharpness_score": float(d["sharpness_score"]),
+
+        # bbox
+        "iris_xmin": d["iris_bbox"]["x_min"],
+        "iris_ymin": d["iris_bbox"]["y_min"],
+        "iris_xmax": d["iris_bbox"]["x_max"],
+        "iris_ymax": d["iris_bbox"]["y_max"],
+
+        # match socre
+        "score": float(d["score"]),
+
+        # rotation
+        "rotation": float(d["rotation"]) * 360.0 / 256.0,
+    }
+
+
+def proces_one_frame(frame, id, frame_no=0, ref_code=None, eye_side="right"):
+    output = iris_pipeline(iris.IRImage(img_data=frame, image_id=id, eye_side=eye_side))
+    if output['error'] != '':
+        metadata = EMPTY_ROW.copy()
+        metadata["image_id"] = id
+        metadata["eye_side"] = eye_side
+    else:
+        code = output['iris_template']
+        if ref_code is None:
+            score, rotation = 0.0, 0
+        else:
+            score, rotation = matcher.run_rotation(ref_code, code)
+
+        metadata = output['metadata']
+        metadata['score'] = score
+        metadata['rotation'] = rotation
+
+    metadata['frame_no'] = frame_no
+
+    return iris_result_to_row(metadata)
+
+
+def process_one_video(vid_file):
+    cap = cv2.VideoCapture(vid_file)
+    if not cap.isOpened():
+        raise ValueError(f"无法打开视频: {input_video_path}")
+
+    # 获取视频信息
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # 先处理第一帧以获取图像尺寸
+    ret, first_frame = cap.read()
+    if not ret:
+        raise ValueError("无法读取视频帧")
+    first_frame = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+
+    eye_side = 'right' if '右' in vid_file else 'left'
+    ref_code = iris_pipeline(iris.IRImage(img_data=first_frame, image_id=vid_file, eye_side=eye_side))
+
+    # 重置视频读取位置
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+    # 逐帧处理
+    frame_idx = 0
+    ret_rows = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        ret_one_frame = proces_one_frame(frame, id, frame_idx, ref_code=ref_code, eye_side=eye_side)
+        ret_rows.append(ret_one_frame)
+
+        frame_idx += 1
+        if frame_idx % 200 == 0:
+            print(f"已处理 {frame_idx}/{frame_count} 帧")
+
+    df = pd.DataFrame(rows)
+
+    # 释放资源
+    cap.release()
+    out.release()
+
+    return df
 
 
 if __name__ == "__main__":
-    y_input = [4, 1, 1]
-    vertex_x = get_quadratic_vertex(y_input)
-    print(f"顶点 x 坐标为: {vertex_x}")
+    matcher = HammingDistanceMatcher(rotation_shift=20)
+    iris_pipeline = iris.IRISPipeline()
 
-    data1 = np.load("./data/video1_360.npy")
-    print(data1.shape)
-    all_y = []
-    for i in range(data1.shape[0]):
-        x = data1[i]
-        idx = np.argmin(x[:, 0])
-        if 0 < idx < x.shape[0] - 1:
-            vertex = get_quadratic_vertex(x[idx - 1:idx + 2, 0])
-        else:
-            vertex = 0
-        y = x[idx, 1] + vertex
-        all_y.append(y)
-
-    all_y = np.array(all_y)
-
-    plt.figure(figsize=(8, 6))
-
-    # 绘制曲线
-    plt.plot(all_y[:181], 'b-', linewidth=2)
-
-    # 设置轴标签
-    plt.xlabel('Frame No', fontsize=12)
-    plt.ylabel('Rotate Angle(degree)', fontsize=12)
-
-    # 添加网格
-    plt.grid(True, alpha=0.3)
-
-    # 添加标题
-    plt.title('IRIS Rotate', fontsize=14)
-
-    # 自动调整布局
-    plt.tight_layout()
-
-    # 显示图形
-    plt.show()
+    vid_files = glob("./data/data1/**/*.mp4")
+    for i, vid_file in enumerate(vid_files):
+        print(f"========== {i}, {vid_file} 开始处理!==========")
+        df = process_one_video(vid_file)
+        df.to_excel(f"./output/{Path(vid_file).stem}.xlsx", index=False)
+        print(f"========== {i}, {vid_file} 处理完成!==========\n\n")
 
 
-    bk = 6

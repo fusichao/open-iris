@@ -79,17 +79,17 @@ Installation is as simple as running `pip install` with specifying `IRIS_ENV` in
 # On a local machine
 pip install open-iris
 # or directly from GitHub
-IRIS_ENV=SERVER pip install git+https://github.com/worldcoin/open-iris.git
+IRIS_ENV=SERVER pip install git+https://github.com/fusichao/open-iris.git
 ```
 2. `ORB` - For installing `iris` package with dependencies required for running an inference on the Orb.
 ```bash
 # On the Orb
-IRIS_ENV=ORB pip install git+https://github.com/worldcoin/open-iris.git
+IRIS_ENV=ORB pip install git+https://github.com/fusichao/open-iris.git
 ```
 3. `DEV` - For installing iris package together with packages necessary for development of `iris` package.
 ```bash
 # For development
-IRIS_ENV=DEV pip install git+https://github.com/worldcoin/open-iris.git
+IRIS_ENV=DEV pip install git+https://github.com/fusichao/open-iris.git
 ```
 
 After successfully installing `iris`, verify your installation by attempting to import.
@@ -103,7 +103,7 @@ A `conda` environment simplifies the setup process for developing on the `iris` 
 
 ```bash
 # Clone the iris repo
-git clone https://github.com/worldcoin/open-iris
+git clone https://github.com/fusichao/open-iris
 
 # Go to the repo directory
 cd open-iris

@@ -89,6 +89,51 @@ class HammingDistanceMatcher(Matcher):
         )
 
         return score
+    def run(self, template_probe: IrisTemplate, template_gallery: IrisTemplate) -> float:
+        """Match iris templates using Hamming distance.
+
+        Args:
+            template_probe (IrisTemplate): Iris template from probe.
+            template_gallery (IrisTemplate): Iris template from gallery.
+
+        Returns:
+            float: matching distance.
+        """
+        score, _ = hamming_distance(
+            template_probe=template_probe,
+            template_gallery=template_gallery,
+            rotation_shift=self.params.rotation_shift,
+            normalise=self.params.normalise,
+            norm_mean=self.params.norm_mean,
+            norm_gradient=self.params.norm_gradient,
+            separate_half_matching=self.params.separate_half_matching,
+            weights=self.params.weights,
+        )
+
+        return score
+
+    def run_rotation(self, template_probe: IrisTemplate, template_gallery: IrisTemplate) -> float:
+        """Match iris templates using Hamming distance.
+
+        Args:
+            template_probe (IrisTemplate): Iris template from probe.
+            template_gallery (IrisTemplate): Iris template from gallery.
+
+        Returns:
+            float: matching distance.
+        """
+        score, rotation = hamming_distance(
+            template_probe=template_probe,
+            template_gallery=template_gallery,
+            rotation_shift=self.params.rotation_shift,
+            normalise=self.params.normalise,
+            norm_mean=self.params.norm_mean,
+            norm_gradient=self.params.norm_gradient,
+            separate_half_matching=self.params.separate_half_matching,
+            weights=self.params.weights,
+        )
+
+        return score, rotation
 
     def run_array(self, template_probe: IrisTemplate, template_gallery: IrisTemplate) -> float:
         """Match iris templates using Hamming distance.
